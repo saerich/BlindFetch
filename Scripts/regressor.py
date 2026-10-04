@@ -1,19 +1,20 @@
 import re
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-
+from sklearn.metrics import r2_score, mean_absolute_error
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
 
 X = []
 y = []
+groups = []
+response_id = 0
 
-with open("../Data/Header.csv", "r", encoding="utf-8") as f:
+with open("Data/Header.csv", "r", encoding="utf-8") as f:
     for line in f:
         line = line.strip()
         if not line:
@@ -102,8 +103,6 @@ with open("../Data/Header.csv", "r", encoding="utf-8") as f:
             firmware_count,
             beta1_len,
             beta2_len,
-            len(line),
-            len(tail),
             len(parsed_blocks),
             sum(ct_lens),
             float(np.mean(ct_lens)),
@@ -130,9 +129,12 @@ with open("../Data/Header.csv", "r", encoding="utf-8") as f:
             ]
             X.append(features)
             y.append(actual_size)
+            groups.append(response_id)
+        response_id += 1
 
 X = np.array(X, dtype=float)
 y = np.array(y, dtype=float)
+groups = np.array(groups)
 
 if len(X) < 10:
     raise RuntimeError(f"Not enough parsed samples: {len(X)}")
@@ -141,13 +143,30 @@ print(f"Parsed samples: {len(X)}")
 print(f"Feature count: {X.shape[1]}")
 print(f"Target min/max: {y.min()} / {y.max()}")
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42
-)
+splitter = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=42)
+train_idx, test_idx = next(splitter.split(X, y, groups=groups))
+
+X_train = X[train_idx]
+X_test = X[test_idx]
+y_train = y[train_idx]
+y_test = y[test_idx]
+
+train_groups = set(groups[train_idx])
+test_groups = set(groups[test_idx])
+
+print(f"Training responses: {len(train_groups)}")
+print(f"Test responses:     {len(test_groups)}")
+print(f"Training samples:   {len(train_idx)}")
+print(f"Test samples:       {len(test_idx)}")
+
+assert train_groups.isdisjoint(test_groups)
 
 lin = LinearRegression()
 lin.fit(X_train, y_train)
+lin_pred = lin.predict(X_test)
+
 lin_r2 = r2_score(y_test, lin.predict(X_test))
+lin_mae = mean_absolute_error(y_test, lin_pred)
 
 rf = RandomForestRegressor(
     n_estimators=300,
@@ -155,10 +174,15 @@ rf = RandomForestRegressor(
     min_samples_leaf=2
 )
 rf.fit(X_train, y_train)
-rf_r2 = r2_score(y_test, rf.predict(X_test))
+rf_pred = rf.predict(X_test)
+
+rf_r2 = r2_score(y_test, rf_pred)
+rf_mae = mean_absolute_error(y_test, rf_pred)
 
 print(f"Blind Fetch Linear Regression R²: {lin_r2:.6f}")
+print(f"Blind Fetch Linear Regression MAE: {rf_mae:.2f} bytes")
 print(f"Blind Fetch Random Forest Regression R²: {rf_r2:.6f}")
+print(f"Blind Fetch Random Forest Regression MAE: {rf_mae:.2f} bytes")
 
 corrs = []
 for i in range(X.shape[1]):
@@ -171,7 +195,7 @@ for i in range(X.shape[1]):
 
 rows = []
 
-with open("../Data/PlainHeader.csv", "r") as f:
+with open("Data/PlainHeader.csv", "r") as f:
     next(f, None)  # skip header if present
     for line in f:
         line = line.strip()
@@ -215,6 +239,7 @@ lin = Pipeline([
 lin.fit(X_train, y_train)
 lin_pred = lin.predict(X_test)
 lin_r2 = r2_score(y_test, lin_pred)
+lin_mae = mean_absolute_error(y_test, lin_pred)
 
 # --- Random Forest ---
 rf = Pipeline([
@@ -227,6 +252,9 @@ rf = Pipeline([
 rf.fit(X_train, y_train)
 rf_pred = rf.predict(X_test)
 rf_r2 = r2_score(y_test, rf_pred)
+rf_mae = mean_absolute_error(y_test, rf_pred)
 
 print(f"Static Manifest Linear Regression R²: {lin_r2:.6f}")
+print(f"Static Manfiest Linear Regression MAE: {lin_mae:.2f}")
 print(f"Static Manifest Random Forest Regression R²: {rf_r2:.6f}")
+print(f"Static Manifest Random Forest Regression MAE: {rf_mae:.2f}")

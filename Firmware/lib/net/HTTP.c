@@ -5,6 +5,9 @@
 
 static const char* TAG = "HTTP";
 static const int HTTP_BUFFER_MAX = 4096;
+//static const int DISCARD_BUFFER_SIZE = 16384;
+// static const int DISCARD_BUFFER_SIZE = 32768;
+static const int DISCARD_BUFFER_SIZE = 65536;
 
 static esp_err_t onHttpReceive(esp_http_client_event_t* evt)
 {
@@ -194,7 +197,7 @@ esp_err_t TLSPost(const char* baseURL, const char* path, const uint8_t* postBody
         .url = url,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 3600000,
-        .buffer_size = 16384,
+        .buffer_size = 4096, //DISCARD_BUFFER_SIZE,
         .buffer_size_tx = 1024,
         .cert_pem = pemStart
         //.crt_bundle_attach = esp_crt_bundle_attach,
@@ -262,19 +265,21 @@ int ResponseReadUpTo(esp_http_client_handle_t client, uint8_t* buf, int len)
 
 esp_err_t ResponseDiscard(esp_http_client_handle_t client, size_t total)
 {
-    uint8_t* buf = malloc(16384);
-    // uint8_t buf[4096];
-    int remaining = total;
+    if(total == 0) { return ESP_OK; }
+    uint8_t* buf = malloc(DISCARD_BUFFER_SIZE);
+    if(buf == NULL) { ESP_LOGE("HTTP", "Could not allocate discard buffer."); return ESP_ERR_NO_MEM; }
 
-    int loops = 0;
+    size_t remaining = total;
+    size_t loops = 0;
 
     while(remaining > 0)
     {
-        int take = (remaining < 16384 ? remaining : 16384);
+        int take = (remaining < DISCARD_BUFFER_SIZE ? (int)remaining : DISCARD_BUFFER_SIZE);
         int r = esp_http_client_read(client, (char*)buf, take);
 
-        if(r <= 0 ) 
+        if(r <= 0)
         {
+            ESP_LOGE("HTTP", "Discard failed, %zu of %zu bytes remaining, read %d", remaining, total, r);
             free(buf); 
             return ESP_FAIL; 
         }

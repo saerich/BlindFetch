@@ -1,27 +1,19 @@
-﻿#define ConstructMergedExecutions
+﻿//#define ConstructMergedExecutions
+//#define TLSComparison
 // //BBT01|LB01|PSC01|SLM01
 #if ConstructMergedExecutions
-string[] orderedCloseEarlyExec =
-    [.. File.ReadAllLines("../Data/OrderedExecutionsCloseEarlyBBT01.csv").Skip(1).Select(x => $"0,{x}")
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsCloseEarlyLB01.csv").Skip(1).Select(x => $"1,{x}"))
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsCloseEarlyPSC01.csv").Skip(1).Select(x => $"2,{x}"))
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsCloseEarlySLM01.csv").Skip(1).Select(x => $"3,{x}"))];
 
-string[] unorderedCloseEarlyExec = [.. File.ReadAllLines("../Data/UnorderedExecutionsCloseEarlyBBT01.csv").Skip(1).Select(x => $"BBT01,{x}")
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsCloseEarlyLB01.csv").Skip(1).Select(x => $"LB01,{x}"))
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsCloseEarlyPSC01.csv").Skip(1).Select(x => $"PSC01,{x}"))
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsCloseEarlySLM01.csv").Skip(1).Select(x => $"SLM01,{x}"))];
+string[][] clientFirmware = [
+    [.. File.ReadAllLines("../Data/Logs-EarlyClose-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines("../Data/Logs-EarlyClose-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines("../Data/Logs-FixedBudget-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines("../Data/Logs-FixedBudget-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())]
+];
 
-string[] orderedFixedExec =
-    [.. File.ReadAllLines("../Data/OrderedExecutionsFixedBudgetBBT01.csv").Skip(1).Select(x => $"0,{x}")
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsFixedBudgetLB01.csv").Skip(1).Select(x => $"1,{x}"))
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsFixedBudgetPSC01.csv").Skip(1).Select(x => $"2,{x}"))
-    .Union(File.ReadAllLines("../Data/OrderedExecutionsFixedBudgetSLM01.csv").Skip(1).Select(x => $"3,{x}"))];
-
-string[] unorderedFixedExec = [.. File.ReadAllLines("../Data/UnorderedExecutionsFixedBudgetBBT01.csv").Skip(1).Select(x => $"BBT01,{x}")
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsFixedBudgetLB01.csv").Skip(1).Select(x => $"LB01,{x}"))
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsFixedBudgetPSC01.csv").Skip(1).Select(x => $"PSC01,{x}"))
-    .Union(File.ReadAllLines("../Data/UnorderedExecutionsFixedBudgetSLM01.csv").Skip(1).Select(x => $"SLM01,{x}"))];
+string[] orderedCloseEarlyExec = [.. File.ReadAllLines("../Data/Logs-EarlyClose-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[0].ElementAt(idx)},{x}")];
+string[] unorderedCloseEarlyExec = [.. File.ReadAllLines("../Data/Logs-EarlyClose-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[1].ElementAt(idx)},{x}")];
+string[] orderedFixedExec = [.. File.ReadAllLines("../Data/Logs-FixedBudget-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[2].ElementAt(idx)},{x}")];
+string[] unorderedFixedExec = [.. File.ReadAllLines("../Data/Logs-FixedBudget-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[3].ElementAt(idx)},{x}")];
 
 string outFile = "../Data/MergedExecutions.csv";
 
@@ -34,9 +26,11 @@ if(orderedCloseEarlyExec.Length == unorderedCloseEarlyExec.Length && orderedFixe
     for(int i = 0; i < orderedFixedExec.Length; i++)
     {
         string[] orderedCloseEarlyRow = orderedCloseEarlyExec[i].Split(",");
+        int actualPositionOCE = orderedCloseEarlyRow.ElementAt(5).Replace("[", "").Replace("]", "").Split("|").IndexOf(orderedCloseEarlyRow.ElementAt(0));
         string[] unorderedCloseEarlyRow = unorderedCloseEarlyExec[i].Split(",");
         int actualPositionUCE = unorderedCloseEarlyRow.ElementAt(5).Replace("[", "").Replace("]", "").Split("|").IndexOf(unorderedCloseEarlyRow.ElementAt(0));
         string[] orderedFixedBudgetRow = orderedFixedExec[i].Split(",");
+        int actualPositionOFB = orderedFixedBudgetRow.ElementAt(5).Replace("[", "").Replace("]", "").Split("|").IndexOf(orderedFixedBudgetRow.ElementAt(0));
         string[] unorderedFixedBudgetRow = unorderedFixedExec[i].Split(",");
         int actualPositionUFB = unorderedFixedBudgetRow.ElementAt(5).Replace("[", "").Replace("]", "").Split("|").IndexOf(unorderedFixedBudgetRow.ElementAt(0));
 
@@ -47,9 +41,9 @@ if(orderedCloseEarlyExec.Length == unorderedCloseEarlyExec.Length && orderedFixe
 
         string[] file = 
         [
-            $"EarlyClose,Ordered,4,{TimeSpan.Parse(orderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedCloseEarlyRow[7]).TotalMilliseconds},{orderedCloseEarlyRow[4]},{counter++},{orderedCloseEarlyRow[0]},{orderedEarlyCloseSlots[0]},{orderedEarlyCloseSlots[1]},{orderedEarlyCloseSlots[2]},{orderedEarlyCloseSlots[3]}",
+            $"EarlyClose,Ordered,4,{TimeSpan.Parse(orderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedCloseEarlyRow[7]).TotalMilliseconds},{orderedCloseEarlyRow[4]},{counter++},{actualPositionOCE},{orderedEarlyCloseSlots[0]},{orderedEarlyCloseSlots[1]},{orderedEarlyCloseSlots[2]},{orderedEarlyCloseSlots[3]}",
             $"EarlyClose,Unordered,4,{TimeSpan.Parse(unorderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedCloseEarlyRow[7]).TotalMilliseconds},{unorderedCloseEarlyRow[4]},{counter++},{actualPositionUCE},{unorderedEarlyCloseSlots[0]},{unorderedEarlyCloseSlots[1]},{unorderedEarlyCloseSlots[2]},{unorderedEarlyCloseSlots[3]}",
-            $"FixedBudget,Ordered,4,{TimeSpan.Parse(orderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedFixedBudgetRow[3]).TotalMilliseconds},{orderedFixedBudgetRow[4]},{counter++},{orderedFixedBudgetRow[0]},{orderedFixedBudgetSlots[0]},{orderedFixedBudgetSlots[1]},{orderedFixedBudgetSlots[2]},{orderedFixedBudgetSlots[3]}",
+            $"FixedBudget,Ordered,4,{TimeSpan.Parse(orderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedFixedBudgetRow[3]).TotalMilliseconds},{orderedFixedBudgetRow[4]},{counter++},{actualPositionOFB},{orderedFixedBudgetSlots[0]},{orderedFixedBudgetSlots[1]},{orderedFixedBudgetSlots[2]},{orderedFixedBudgetSlots[3]}",
             $"FixedBudget,Unordered,4,{TimeSpan.Parse(unorderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedFixedBudgetRow[3]).TotalMilliseconds},{unorderedFixedBudgetRow[4]},{counter++},{actualPositionUFB},{unorderedFixedBudgetSlots[0]},{unorderedFixedBudgetSlots[1]},{unorderedFixedBudgetSlots[2]},{unorderedFixedBudgetSlots[3]}"
         ];
 

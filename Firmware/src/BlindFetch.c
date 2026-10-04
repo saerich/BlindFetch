@@ -92,6 +92,45 @@ void OTAHeaderGeneration(const char* downloadServerURL, const char* deviceFirmwa
     free(body);
 }
 
+#ifdef ReportUsage
+void SendMetricsToServer(const char* reportServerURL, size_t peakHeap, size_t minHeap, int64_t startTime, int64_t endTime, const char* firmwareName)
+{
+    uint32_t firmwareNameLength = strlen(firmwareName);
+    size_t bodyLen = sizeof(peakHeap) + sizeof(minHeap) + sizeof(startTime) + sizeof(endTime) + sizeof(firmwareNameLength) + firmwareNameLength;
+    uint8_t* body = malloc(bodyLen);
+
+    if(!body)
+    {
+        ESP_LOGE("HTTP", "Could not allocate body");
+        return;
+    }
+
+    uint8_t* p = body;
+    
+    memcpy(p, &startTime, sizeof(startTime));
+    p += sizeof(startTime);
+    
+    memcpy(p, &endTime, sizeof(endTime));
+    p += sizeof(endTime);
+    
+    memcpy(p, &minHeap, sizeof(minHeap));
+    p += sizeof(minHeap);
+
+    memcpy(p, &peakHeap, sizeof(peakHeap));
+    p += sizeof(peakHeap);
+    memcpy(p, &firmwareNameLength, sizeof(firmwareNameLength));
+    p += sizeof(firmwareNameLength);
+
+    memcpy(p, firmwareName, firmwareNameLength);
+
+    int statusCode = 0;
+    esp_http_client_handle_t c;
+    ESP_ERROR_CHECK(TLSPost(reportServerURL, "/WriteLog", body, bodyLen, &c, &statusCode));
+    free(body);
+    HttpDrainAndFree(&c);
+}
+#endif
+
 void BlindDownloadFirmware(const char* downloadServerURL, const char* deviceFirmwareKey, const char* username, const uint8_t skClient[OPAQUE_SHARED_SECRETBYTES])
 {
     uint8_t deviceKey[crypto_core_ristretto255_BYTES];
@@ -208,10 +247,11 @@ void BlindDownloadFirmware(const char* downloadServerURL, const char* deviceFirm
     if(slotNumber == -1) { ESP_ERROR_CHECK(ESP_ERR_HW_CRYPTO_BASE); }
 
     int expectedBlocks = 4096;
-
-    int discardBlocks = slotNumber * expectedBlocks; //4096 = 4mb firmware image / 1024 byte block sizes.
+    const size_t blockSize = 1052;
+    size_t discardBlocks = (size_t)slotNumber * (size_t)expectedBlocks; //4096 = 4mb firmware image / 1024 byte block sizes.
+    size_t discardBytes = discardBlocks * blockSize;
     //Effectively we want to read and discard n bytes, in blocks, each block is 1052 bytes,  slot number * expectedBlocks * 1052 = total bytes to read and discard.
-    ResponseDiscard(c, discardBlocks * 1052);
+    ResponseDiscard(c, discardBytes);
 
     ESP_LOGI("Download", "Discarded %d blocks", discardBlocks);
     
@@ -228,28 +268,30 @@ void BlindDownloadFirmware(const char* downloadServerURL, const char* deviceFirm
     long remaining = actualSize;
     for(int i = 0; i < expectedBlocks; i++)
     {
-        uint8_t nonce[12];
-        uint8_t cipherText[1040];
+        // uint8_t nonce[12];
+        // uint8_t cipherText[1040];
+        uint8_t encBlock[1052];
         uint8_t raw[1024];
 
         unsigned long long rawLen;
+        ResponseReadUpTo(c, encBlock, 1052);
+        // ResponseReadUpTo(c, nonce, 12);
+        // ESP_LOGI("Encryption", "Received raw nonce");
+        // ResponseReadUpTo(c, cipherText, 1040);
+        // ESP_LOGI("Encryption", "Retrieved ciphertext.");
 
-        ResponseReadUpTo(c, nonce, 12);
-        ESP_LOGI("Encryption", "Received raw nonce");
-        ResponseReadUpTo(c, cipherText, 1040);
-        ESP_LOGI("Encryption", "Retrieved ciphertext.");
-
+        uint8_t* nonce = encBlock;
+        uint8_t* cipherText = encBlock + 12;
         uint8_t nonceKey[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
         CalculateNonceKey(nonce, rwdU, (const uint8_t*)&i, nonceKey);
-        ESP_LOGI("Encryption", "Calculated nonce key");
 
         uint8_t aad[72];
         CreateAAD((const uint8_t*)&slotNumber, (const uint8_t*)&i, rwdU, aad);
-        ESP_LOGI("Encryption", "Calculated AAD");
+        // ESP_LOGI("Encryption", "Calculated AAD");
 
-        if(crypto_aead_chacha20poly1305_ietf_decrypt(raw, &rawLen, NULL, cipherText, sizeof(cipherText), aad, sizeof(aad), nonceKey, aeadKey) != 0)
+        if(crypto_aead_chacha20poly1305_ietf_decrypt(raw, &rawLen, NULL, cipherText, sizeof(encBlock)-12, aad, sizeof(aad), nonceKey, aeadKey) != 0)
         {
-            ESP_LOGE("DECRYPT", "Decryption failed, for some reason.");
+            ESP_LOGE("DECRYPT", "Decryption faied.");
             HttpDrainAndFree(&c);
             esp_partition_erase_range(nextPartition, 0, nextPartition->size);
             esp_ota_end(otaHandle);
@@ -263,9 +305,10 @@ void BlindDownloadFirmware(const char* downloadServerURL, const char* deviceFirm
         if(remaining <= 0)
         {
             #ifndef EarlyClose
-                int discarded = 0;
-                esp_http_client_flush_response(c, &discarded); //No point in manually flushing, this does it for us.
-                ESP_LOGI("HTTP", "Discarded %d bytes", discarded);
+                // int discarded = 0;
+                size_t remainingBytes = (((size_t)numberSKUs * expectedBlocks) - ((size_t)slotNumber * expectedBlocks) - (size_t)(i+1)) * blockSize;
+                ResponseDiscard(c, remainingBytes);
+                ESP_LOGI("HTTP", "Discarded %zu bytes", remainingBytes);
                 HttpFree(&c);
             #else
                 HttpFree(&c);
@@ -309,12 +352,11 @@ void BlindDownloadFirmware(const char* downloadServerURL, const char* deviceFirm
             ESP_ERROR_CHECK_WITHOUT_ABORT(err);
             if(err != ESP_OK)
             {
-                esp_partition_erase_range(nextPartition, 0, nextPartition->size);
+                // esp_partition_erase_range(nextPartition, 0, nextPartition->size);
                 esp_ota_end(otaHandle);
                 return;
             }
             #ifndef APPLY_FIRMWARE
-            esp_partition_erase_range(nextPartition, 0, nextPartition->size);
             esp_ota_end(otaHandle);
             #else
             esp_ota_end(otaHandle);

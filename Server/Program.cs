@@ -1,7 +1,9 @@
+// #define ORDERED
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Web;
 using ObliviousOTA.Interop;
 using ObliviousOTA.Models.Request;
@@ -33,10 +35,8 @@ cleanup();
 app.Lifetime.ApplicationStopping.Register(cleanup);
 
 Directory.CreateDirectory("Logs");
-if(!File.Exists("Logs/Executions.csv"))
-{
-    File.WriteAllText("Logs/Executions.csv", "Start Time,TTFB,TTLB,Blocks Served,SlotOrder,Aborted?,Aborted at\n");
-}
+if(!File.Exists("Logs/Client.csv")) { File.WriteAllText("Logs/Client.csv", "StartTime,EndTime,Duration(us),Duration(s),MinHeap,MaxHeap,HeapDiff,FIrmware\n"); }
+if(!File.Exists("Logs/Executions.csv")) { File.WriteAllText("Logs/Executions.csv", "Start Time,TTFB,TTLB,Blocks Served,SlotOrder,Aborted?,Aborted at\n"); }
 
 byte[] seed = new byte[Interop.crypto_scalarmult_SCALARBYTES];
 
@@ -115,6 +115,32 @@ app.MapGet("/LoginVerify", ([AsParameters] LoginVerifyRequest req) =>
 app.MapGet("/KTV", async([AsParameters] KTVRequest req) =>
 {
     File.AppendAllText("Logs/KTV.csv", $"{DateTime.UtcNow},{req.Username},{req.Alpha1},{req.Alpha2},{req.Beta1},{req.Beta2},{req.N1},{req.N2},{req.RWDU1},{req.RWDU2},{req.FWHash},{req.DeviceKey},{req.RealBlocks},{req.AbsorbedBlocks},{req.SK}\n");
+});
+
+app.MapPost("/WriteLog", async ctx =>
+{
+    Memory<byte> startTime = new byte[8];
+    await ctx.Request.Body.ReadExactlyAsync(startTime, ctx.RequestAborted);
+    Memory<byte> endTime = new byte[8];
+    await ctx.Request.Body.ReadExactlyAsync(endTime, ctx.RequestAborted);
+    Memory<byte> minHeap = new byte[4];
+    await ctx.Request.Body.ReadExactlyAsync(minHeap, ctx.RequestAborted);
+    Memory<byte> peakHeap = new byte[4];
+    await ctx.Request.Body.ReadExactlyAsync(peakHeap, ctx.RequestAborted);
+    Memory<byte> firmwareLen = new byte[4];
+    await ctx.Request.Body.ReadExactlyAsync(firmwareLen, ctx.RequestAborted);
+    Memory<byte> firmware = new byte[BitConverter.ToInt32(firmwareLen.Span)];
+    await ctx.Request.Body.ReadExactlyAsync(firmware, ctx.RequestAborted);
+
+    using FileStream fs = new("Logs/Client.csv", FileMode.Append, FileAccess.Write, FileShare.Read);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($"{BitConverter.ToInt64(startTime.Span)},{BitConverter.ToInt64(endTime.Span)}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($",{BitConverter.ToInt64(endTime.Span) - BitConverter.ToInt64(startTime.Span)}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($",{(BitConverter.ToInt64(endTime.Span) - BitConverter.ToInt64(startTime.Span)) / 1_000_000}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($",{BitConverter.ToInt32(minHeap.Span)},{BitConverter.ToInt32(peakHeap.Span)}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($",{BitConverter.ToInt32(peakHeap.Span) - BitConverter.ToInt32(minHeap.Span)}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes($",{Encoding.UTF8.GetString(firmware.Span)}"), ctx.RequestAborted);
+    await fs.WriteAsync(Encoding.UTF8.GetBytes("\n"), ctx.RequestAborted);
+    await fs.FlushAsync(ctx.RequestAborted);
 });
 
 app.MapPost("/PlainOTA", async ctx =>
@@ -266,7 +292,7 @@ app.MapPost("/Download", async ctx =>
 
 
     string username = Encoding.UTF8.GetString(unameBuf);
-    
+
     try
     {
         userKey = File.ReadAllBytes($"{username}.osk");
@@ -284,7 +310,7 @@ app.MapPost("/Download", async ctx =>
 
     ctx.Response.ContentType = "application/octet-stream";
     ctx.Response.StatusCode = 200;
-    ctx.Response.ContentLength = 68L + (firmwareCount * 36L) + (firmwareCount * 4096L * 1052L); //36L = size header size, 4096L = blocks, 1025L = blockSize, 68L = beta 1, 2 and number of firmware.
+    ctx.Response.ContentLength = 68L + (firmwareCount * 36L) + (firmwareCount * 4096L * 1052L); //36L = size header size, 4096L = blocks, 1052L = blockSize, 68L = beta 1, 2 and number of firmware.
     
     // ctx.Response.Headers.TransferEncoding = "identity";
     using MemoryStream headerMs = new();
@@ -298,13 +324,13 @@ app.MapPost("/Download", async ctx =>
         (allFirmwareKeys[i], allFirmwareKeys[j]) = (allFirmwareKeys[j], allFirmwareKeys[i]);
     }
     #endif
+    Dictionary<string, byte[]> deviceKeys = allFirmwareKeys.ToDictionary(x => x, x => File.ReadAllBytes(x));
 
     headerMs.Write(BitConverter.GetBytes((int)firmwareCount));
     
     foreach(var key in allFirmwareKeys) 
     {
         byte[]? fwHash = InteropWrappers.CreateKeyFromSKUKey(userKey, File.ReadAllBytes(key));
-        // headerMs.Write(fwHash ?? new byte[64]);
         long actualFileSize = new FileInfo($"Firmware/{Path.GetFileNameWithoutExtension(key)}.bin").Length;
         (byte[] Ciphertext, byte[] Nonce)? len = InteropWrappers.EncryptFirmwareSize(userKey, oprfSizeSeed, fwHash ?? new byte[64], BitConverter.GetBytes(actualFileSize)); //24 bytes.
         if(len == null) 
@@ -329,28 +355,39 @@ app.MapPost("/Download", async ctx =>
         long remaining = slotSize;
         byte[] plainText = new byte[1024];
         int block = 0;
+        bool eof = false;
+        byte[] deviceKey = deviceKeys[x.key];
         while(remaining > 0)
         {
-            int read = await fs.ReadAsync(plainText, 0, (int)Math.Min(1024, remaining));
-            if(read == 0) { Array.Clear(plainText, 0, plainText.Length); }
+            int read = 0;
+            if(!eof) { read = await fs.ReadAsync(plainText, 0, (int)Math.Min(1024, remaining)); }
+            if(read == 0)
+            { 
+                eof = true;
+                Array.Clear(plainText, 0, plainText.Length); 
+            }
             else if(read < plainText.Length) { Array.Clear(plainText, read, plainText.Length - read); }
-
-            byte[] deviceKey = File.ReadAllBytes(x.key);
 
             (byte[] Ciphertext, byte[] Nonce)? encryptedFirmware = InteropWrappers.EncryptFirmware(x.idx, block++, userKey, oprfFileSeed, deviceKey, plainText);
             if(encryptedFirmware == null) { Console.WriteLine("Null response."); break; }
+            
+            Memory<byte> encBlock = new byte[1052];
+            encryptedFirmware.Value.Nonce.AsMemory().CopyTo(encBlock[..12]);
+            encryptedFirmware.Value.Ciphertext.AsMemory().CopyTo(encBlock[12..]);
 
-            await ctx.Response.Body.WriteAsync(encryptedFirmware.Value.Nonce);
-            await ctx.Response.Body.WriteAsync(encryptedFirmware.Value.Ciphertext);
+            await ctx.Response.Body.WriteAsync(encBlock);
             if(aborted == null) { blocksServed++; }
             remaining -= plainText.Length;
         }
         
         fs.Close();
     }
-    await ctx.Response.Body.FlushAsync();
-    DateTime ttlb = DateTime.UtcNow;
-    Console.WriteLine("Downloaded some firmware.");
-    File.AppendAllText($"Logs/Executions.csv", $"{startTime},{ttfb - startTime},{ttlb - startTime},{blocksServed},[{string.Join("|", allFirmwareKeys.Select(x => $"{x.Replace("Keys/", "").Replace(".k", "")}" ))}],{aborted != null},{(aborted == null ? "" : aborted - startTime)}\n");
+    try { await ctx.Response.Body.FlushAsync(ctx.RequestAborted); }
+    finally
+    {
+        DateTime ttlb = DateTime.UtcNow;
+        Console.WriteLine("Downloaded some firmware.");
+        File.AppendAllText($"Logs/Executions.csv", $"{startTime},{ttfb - startTime},{ttlb - startTime},{blocksServed},[{string.Join("|", allFirmwareKeys.Select(x => $"{x.Replace("Keys/", "").Replace(".k", "")}" ))}],{aborted != null},{(aborted == null ? "" : aborted - startTime)}\n");
+    }
 });
 app.Run();

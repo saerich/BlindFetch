@@ -9,4 +9,9 @@ void OTAHeaderGeneration(const char* downloadServerURL, const char* deviceFirmwa
 #ifdef PlainOTA
 uint64_t PlainOTADownload(const char* downloadURL);
 #endif
+
+#ifdef ReportUsage
+void SendMetricsToServer(const char* reportServerURL, size_t peakHeap, size_t minHeap, int64_t startTime, int64_t endTime, const char* firmwareName);
+#endif
+
 #endif
