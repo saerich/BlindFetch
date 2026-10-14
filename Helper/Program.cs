@@ -1,6 +1,7 @@
 ﻿//#define ConstructMergedExecutions
 //#define TLSComparison
 // //BBT01|LB01|PSC01|SLM01
+
 #if ConstructMergedExecutions
 
 string[][] clientFirmware = [
@@ -18,13 +19,14 @@ string[] unorderedFixedExec = [.. File.ReadAllLines("../Data/Logs-FixedBudget-Ra
 string outFile = "../Data/MergedExecutions.csv";
 
 if(File.Exists(outFile)) { File.Delete(outFile); }
-File.WriteAllText(outFile, "Mode,Ordering,Slots,TTFB Miliseconds,TTLB Miliseconds,Blocks,Id,ActualSlot,Slot0,Slot1,Slot2,Slot3\n");
+File.WriteAllText(outFile, "RoundId,Mode,Ordering,Slots,TTFB Miliseconds,TTLB Miliseconds,Blocks,Id,ActualSlot,Slot0,Slot1,Slot2,Slot3\n");
 
 if(orderedCloseEarlyExec.Length == unorderedCloseEarlyExec.Length && orderedFixedExec.Length == unorderedFixedExec.Length && orderedFixedExec.Length == unorderedCloseEarlyExec.Length)
 {
     int counter = 0;
     for(int i = 0; i < orderedFixedExec.Length; i++)
     {
+        int round = i/4; //Truncate for 0,0,0,0; 1,1,1,1...
         string[] orderedCloseEarlyRow = orderedCloseEarlyExec[i].Split(",");
         int actualPositionOCE = orderedCloseEarlyRow.ElementAt(5).Replace("[", "").Replace("]", "").Split("|").IndexOf(orderedCloseEarlyRow.ElementAt(0));
         string[] unorderedCloseEarlyRow = unorderedCloseEarlyExec[i].Split(",");
@@ -41,10 +43,10 @@ if(orderedCloseEarlyExec.Length == unorderedCloseEarlyExec.Length && orderedFixe
 
         string[] file = 
         [
-            $"EarlyClose,Ordered,4,{TimeSpan.Parse(orderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedCloseEarlyRow[7]).TotalMilliseconds},{orderedCloseEarlyRow[4]},{counter++},{actualPositionOCE},{orderedEarlyCloseSlots[0]},{orderedEarlyCloseSlots[1]},{orderedEarlyCloseSlots[2]},{orderedEarlyCloseSlots[3]}",
-            $"EarlyClose,Unordered,4,{TimeSpan.Parse(unorderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedCloseEarlyRow[7]).TotalMilliseconds},{unorderedCloseEarlyRow[4]},{counter++},{actualPositionUCE},{unorderedEarlyCloseSlots[0]},{unorderedEarlyCloseSlots[1]},{unorderedEarlyCloseSlots[2]},{unorderedEarlyCloseSlots[3]}",
-            $"FixedBudget,Ordered,4,{TimeSpan.Parse(orderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedFixedBudgetRow[3]).TotalMilliseconds},{orderedFixedBudgetRow[4]},{counter++},{actualPositionOFB},{orderedFixedBudgetSlots[0]},{orderedFixedBudgetSlots[1]},{orderedFixedBudgetSlots[2]},{orderedFixedBudgetSlots[3]}",
-            $"FixedBudget,Unordered,4,{TimeSpan.Parse(unorderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedFixedBudgetRow[3]).TotalMilliseconds},{unorderedFixedBudgetRow[4]},{counter++},{actualPositionUFB},{unorderedFixedBudgetSlots[0]},{unorderedFixedBudgetSlots[1]},{unorderedFixedBudgetSlots[2]},{unorderedFixedBudgetSlots[3]}"
+            $"{round},EarlyClose,Ordered,4,{TimeSpan.Parse(orderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedCloseEarlyRow[7]).TotalMilliseconds},{orderedCloseEarlyRow[4]},{counter++},{actualPositionOCE},{orderedEarlyCloseSlots[0]},{orderedEarlyCloseSlots[1]},{orderedEarlyCloseSlots[2]},{orderedEarlyCloseSlots[3]}",
+            $"{round},EarlyClose,Unordered,4,{TimeSpan.Parse(unorderedCloseEarlyRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedCloseEarlyRow[7]).TotalMilliseconds},{unorderedCloseEarlyRow[4]},{counter++},{actualPositionUCE},{unorderedEarlyCloseSlots[0]},{unorderedEarlyCloseSlots[1]},{unorderedEarlyCloseSlots[2]},{unorderedEarlyCloseSlots[3]}",
+            $"{round},FixedBudget,Ordered,4,{TimeSpan.Parse(orderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(orderedFixedBudgetRow[3]).TotalMilliseconds},{orderedFixedBudgetRow[4]},{counter++},{actualPositionOFB},{orderedFixedBudgetSlots[0]},{orderedFixedBudgetSlots[1]},{orderedFixedBudgetSlots[2]},{orderedFixedBudgetSlots[3]}",
+            $"{round},FixedBudget,Unordered,4,{TimeSpan.Parse(unorderedFixedBudgetRow[2]).TotalMilliseconds},{TimeSpan.Parse(unorderedFixedBudgetRow[3]).TotalMilliseconds},{unorderedFixedBudgetRow[4]},{counter++},{actualPositionUFB},{unorderedFixedBudgetSlots[0]},{unorderedFixedBudgetSlots[1]},{unorderedFixedBudgetSlots[2]},{unorderedFixedBudgetSlots[3]}"
         ];
 
         File.AppendAllLines(outFile, file);

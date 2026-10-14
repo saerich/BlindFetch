@@ -1,5 +1,5 @@
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedGroupKFold, cross_val_predict
 from sklearn.metrics import roc_auc_score, accuracy_score, balanced_accuracy_score, classification_report, f1_score, recall_score, confusion_matrix
 import pandas as pd
 import numpy as np
@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 CSV_PATH = "Data/MergedExecutions.csv"
 N_SPLITS = 5
 N_BOOTSTRAPS = 10000
+N_PERMUTATIONS = 1000
 RANDOM_STATE = 42
 
 data = pd.read_csv(CSV_PATH)
-data.columns = ["policy","ordering","S","ttfb_ms","ttlb_ms","blocks_sent","perm_id","target_position","Slot0","Slot1","Slot2","Slot3"]
+data.columns = ["round","policy","ordering","S","ttfb_ms","ttlb_ms","blocks_sent","perm_id","target_position","Slot0","Slot1","Slot2","Slot3"]
 for col in ["ttfb_ms","ttlb_ms","blocks_sent","target_position"]:
     data[col] = pd.to_numeric(data[col])
 data["target_position"] = data["target_position"].astype(int)
@@ -26,32 +27,129 @@ def slot_to_firmware(row, slot):
 def features(sub):
     return pd.get_dummies(sub[TIMING_FEATURES + SLOT_COLS], columns=SLOT_COLS, dtype=int)
 
-def evaluate(y, X):
-    cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
+def evaluate(y, X, groups):
+    y = pd.Series(y).reset_index(drop=True)
+    X = X.reset_index(drop=True)
+    groups = pd.Series(groups).reset_index(drop=True)
+
+    cv = StratifiedGroupKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
     model = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
-    pred = cross_val_predict(model, X, y, cv=cv, method="predict")
-    prob = cross_val_predict(model, X, y, cv=cv, method="predict_proba")
+    pred = cross_val_predict(model, X, y, cv=cv, groups=groups, method="predict")
+    prob = cross_val_predict(model, X, y, cv=cv, groups=groups, method="predict_proba")
+
     labels = np.sort(np.unique(y))
-    y_np, pred_np, prob_np = np.asarray(y), np.asarray(pred), np.asarray(prob)
-    class_idx = {c: np.flatnonzero(y_np == c) for c in labels}
+
+    y_np = np.asarray(y)
+    pred_np = np.asarray(pred)
+    prob_np = np.asarray(prob)
+    groups_np = np.asarray(groups)
+
+    unique_groups = np.unique(groups_np)
+    group_idx = {
+        g: np.flatnonzero(groups_np == g)
+        for g in unique_groups
+    }
+
     rng = np.random.default_rng(RANDOM_STATE)
-    boot_acc, boot_f1, boot_auc = [], [], []
+
+    boot_acc = []
+    boot_f1 = []
+    boot_auc = []
+
     for _ in range(N_BOOTSTRAPS):
-        idx = np.concatenate([rng.choice(class_idx[c], len(class_idx[c]), replace=True) for c in labels])
+        sampled_groups = rng.choice(
+            unique_groups,
+            size=len(unique_groups),
+            replace=True
+        )
+
+        idx = np.concatenate([group_idx[g] for g in sampled_groups])
         boot_acc.append(accuracy_score(y_np[idx], pred_np[idx]))
+
         boot_f1.append(f1_score(y_np[idx], pred_np[idx], average="macro"))
+
         boot_auc.append(roc_auc_score(y_np[idx], prob_np[idx], multi_class="ovr", average="macro"))
+
     return {
-        "pred": pred, "prob": prob, "labels": labels,
+        "pred": pred,
+        "prob": prob,
+        "labels": labels,
         "accuracy": accuracy_score(y, pred),
         "balanced_accuracy": balanced_accuracy_score(y, pred),
         "macro_f1": f1_score(y, pred, average="macro"),
         "macro_auc": roc_auc_score(y, prob, multi_class="ovr", average="macro"),
-        "accuracy_ci": np.percentile(boot_acc,[2.5,97.5]),
-        "f1_ci": np.percentile(boot_f1,[2.5,97.5]),
-        "auc_ci": np.percentile(boot_auc,[2.5,97.5]),
-        "recall": recall_score(y,pred,labels=labels,average=None),
-        "cm": confusion_matrix(y,pred,labels=labels),
+        "accuracy_ci": np.percentile(boot_acc, [2.5, 97.5]),
+        "f1_ci": np.percentile(boot_f1, [2.5, 97.5]),
+        "auc_ci": np.percentile(boot_auc, [2.5, 97.5]),
+        "recall": recall_score(y, pred, labels=labels, average=None),
+        "cm": confusion_matrix(y, pred, labels=labels),
+    }
+
+def permutation_test(y, X, groups, n_permutations=N_PERMUTATIONS):
+    y = pd.Series(y).reset_index(drop=True)
+    X = X.reset_index(drop=True)
+    groups = pd.Series(groups).reset_index(drop=True)
+
+    y_np = np.asarray(y)
+    groups_np = np.asarray(groups)
+
+    unique_groups = np.unique(groups_np)
+    group_idx = {
+        g: np.flatnonzero(groups_np == g)
+        for g in unique_groups
+    }
+
+    # Freeze the group-aware folds so every permutation is evaluated
+    # using exactly the same train/test partition.
+    cv = StratifiedGroupKFold(
+        n_splits=N_SPLITS,
+        shuffle=True,
+        random_state=RANDOM_STATE
+    )
+
+    splits = list(cv.split(X, y, groups=groups))
+
+    def classify(labels):
+        model = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
+        pred = cross_val_predict(model, X, labels, cv=splits, method="predict")
+        prob = cross_val_predict(model, X, labels, cv=splits, method="predict_proba")
+
+        return (accuracy_score(labels, pred), f1_score(labels, pred, average="macro"), roc_auc_score(labels, prob, multi_class="ovr", average="macro"))
+
+    observed_acc, observed_f1, observed_auc = classify(y_np)
+
+    rng = np.random.default_rng(RANDOM_STATE)
+
+    null_acc = np.empty(n_permutations)
+    null_f1 = np.empty(n_permutations)
+    null_auc = np.empty(n_permutations)
+
+    for p in range(n_permutations):
+        permuted_y = y_np.copy()
+
+        for g in unique_groups:
+            idx = group_idx[g]
+            permuted_y[idx] = rng.permutation(permuted_y[idx])
+
+        (null_acc[p], null_f1[p], null_auc[p]) = classify(permuted_y)
+
+        if (p + 1) % 100 == 0:
+            print(f"Permutation {p + 1}/{n_permutations}")
+
+    p_acc = (1 + np.sum(null_acc >= observed_acc)) / (n_permutations + 1)
+    p_f1 = (1 + np.sum(null_f1 >= observed_f1)) / (n_permutations + 1)
+    p_auc = (1 + np.sum(null_auc >= observed_auc)) / (n_permutations + 1)
+
+    return {
+        "observed_accuracy": observed_acc,
+        "observed_f1": observed_f1,
+        "observed_auc": observed_auc,
+        "p_accuracy": p_acc,
+        "p_f1": p_f1,
+        "p_auc": p_auc,
+        "null_accuracy": null_acc,
+        "null_f1": null_f1,
+        "null_auc": null_auc
     }
 
 results=[]
@@ -60,16 +158,44 @@ for policy in ["EarlyClose","FixedBudget"]:
         sub=data[(data.policy==policy)&(data.ordering==ordering)].copy()
         if sub.empty: continue
         X=features(sub)
+        groups = sub["round"]
 
         # Attack 1: infer slot, then map predicted slot through known permutation.
-        slot=evaluate(sub["target_position"],X)
+        slot=evaluate(sub["target_position"],X,groups)
         actual_fw=np.array([slot_to_firmware(row,row["target_position"]) for _,row in sub.iterrows()])
         mediated_fw=np.array([slot_to_firmware(row,s) for (_,row),s in zip(sub.iterrows(),slot["pred"])])
         mediated_acc=accuracy_score(actual_fw,mediated_fw)
         mediated_f1=f1_score(actual_fw,mediated_fw,average="macro")
 
         # Attack 2: infer firmware identity directly.
-        direct=evaluate(pd.Series(actual_fw,index=sub.index),X)
+        direct=evaluate(pd.Series(actual_fw,index=sub.index),X,groups)
+
+        print("\nRunning permutation tests...")
+        direct_perm = permutation_test(pd.Series(actual_fw, index=sub.index), X, groups)
+
+        print("\nDIRECT FIRMWARE PERMUTATION TEST")
+        print(f"Accuracy: {direct_perm['observed_accuracy']:.4f}, "
+            f"p={direct_perm['p_accuracy']:.6f}"
+        )
+        print(f"Macro-F1: {direct_perm['observed_f1']:.4f}, "
+            f"p={direct_perm['p_f1']:.6f}"
+        )
+        print(f"Macro-OvR AUROC: {direct_perm['observed_auc']:.4f}, "
+            f"p={direct_perm['p_auc']:.6f}"
+        )
+
+        slot_perm = permutation_test(sub["target_position"], X, groups)
+
+        print("\nSLOT PERMUTATION TEST")
+        print(f"Accuracy: {slot_perm['observed_accuracy']:.4f}, "
+            f"p={slot_perm['p_accuracy']:.6f}"
+        )
+        print(f"Macro-F1: {slot_perm['observed_f1']:.4f}, "
+            f"p={slot_perm['p_f1']:.6f}"
+        )
+        print(f"Macro-OvR AUROC: {slot_perm['observed_auc']:.4f}, "
+            f"p={slot_perm['p_auc']:.6f}"
+        )
 
         label=policy.replace("EarlyClose","Early Close").replace("FixedBudget","Fixed Budget")+"\n"+ordering.replace("Unordered","Randomized")
         results.append((label,slot,mediated_acc,mediated_f1,direct))

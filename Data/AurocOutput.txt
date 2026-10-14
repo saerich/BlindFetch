@@ -1,0 +1,243 @@
+
+Running permutation tests...
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+DIRECT FIRMWARE PERMUTATION TEST
+Accuracy: 0.9975, p=0.000999
+Macro-F1: 0.9975, p=0.000999
+Macro-OvR AUROC: 1.0000, p=0.000999
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+SLOT PERMUTATION TEST
+Accuracy: 0.9975, p=0.000999
+Macro-F1: 0.9975, p=0.000999
+Macro-OvR AUROC: 1.0000, p=0.000999
+==========================================================================================
+EarlyClose + Ordered
+SLOT-MEDIATED ATTACK
+Firmware accuracy: 0.9975
+Firmware macro-F1: 0.9975
+Slot macro-OvR AUROC: 1.0000 [1.0000, 1.0000]
+
+DIRECT FIRMWARE ATTACK
+Firmware accuracy: 0.9975 [0.9925, 1.0000]
+Firmware macro-F1: 0.9975 [0.9925, 1.0000]
+Firmware macro-OvR AUROC: 1.0000 [1.0000, 1.0000]
+
+Direct firmware confusion matrix:
+Labels: ['FW1' 'FW2' 'FW3' 'FW4']
+[[100   0   0   0]
+ [  0 100   0   0]
+ [  0   0  99   1]
+ [  0   0   0 100]]
+              precision    recall  f1-score   support
+
+       FW1       1.00      1.00      1.00       100
+        FW2       1.00      1.00      1.00       100
+       FW3       1.00      0.99      0.99       100
+       FW4       0.99      1.00      1.00       100
+
+    accuracy                           1.00       400
+   macro avg       1.00      1.00      1.00       400
+weighted avg       1.00      1.00      1.00       400
+
+
+Running permutation tests...
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+DIRECT FIRMWARE PERMUTATION TEST
+Accuracy: 0.9525, p=0.000999
+Macro-F1: 0.9524, p=0.000999
+Macro-OvR AUROC: 0.9964, p=0.000999
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+SLOT PERMUTATION TEST
+Accuracy: 0.9975, p=0.000999
+Macro-F1: 0.9975, p=0.000999
+Macro-OvR AUROC: 1.0000, p=0.000999
+==========================================================================================
+EarlyClose + Unordered
+SLOT-MEDIATED ATTACK
+Firmware accuracy: 0.9975
+Firmware macro-F1: 0.9975
+Slot macro-OvR AUROC: 1.0000 [1.0000, 1.0000]
+
+DIRECT FIRMWARE ATTACK
+Firmware accuracy: 0.9525 [0.9300, 0.9725]
+Firmware macro-F1: 0.9524 [0.9298, 0.9725]
+Firmware macro-OvR AUROC: 0.9964 [0.9941, 0.9983]
+
+Direct firmware confusion matrix:
+Labels: ['FW1' 'FW2' 'FW3' 'FW4']
+[[94  3  3  0]
+ [ 0 97  0  3]
+ [ 3  1 93  3]
+ [ 0  1  2 97]]
+              precision    recall  f1-score   support
+
+       FW1       0.97      0.94      0.95       100
+        FW2       0.95      0.97      0.96       100
+       FW3       0.95      0.93      0.94       100
+       FW4       0.94      0.97      0.96       100
+
+    accuracy                           0.95       400
+   macro avg       0.95      0.95      0.95       400
+weighted avg       0.95      0.95      0.95       400
+
+
+Running permutation tests...
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+DIRECT FIRMWARE PERMUTATION TEST
+Accuracy: 0.3500, p=0.000999
+Macro-F1: 0.3511, p=0.000999
+Macro-OvR AUROC: 0.6140, p=0.000999
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+SLOT PERMUTATION TEST
+Accuracy: 0.3500, p=0.000999
+Macro-F1: 0.3511, p=0.000999
+Macro-OvR AUROC: 0.6140, p=0.000999
+==========================================================================================
+FixedBudget + Ordered
+SLOT-MEDIATED ATTACK
+Firmware accuracy: 0.3500
+Firmware macro-F1: 0.3511
+Slot macro-OvR AUROC: 0.6140 [0.5752, 0.6525]
+
+DIRECT FIRMWARE ATTACK
+Firmware accuracy: 0.3500 [0.2975, 0.4000]
+Firmware macro-F1: 0.3511 [0.2998, 0.4016]
+Firmware macro-OvR AUROC: 0.6140 [0.5752, 0.6525]
+
+Direct firmware confusion matrix:
+Labels: ['FW1' 'FW2' 'FW3' 'FW4']
+[[45 29 15 11]
+ [29 31 18 22]
+ [ 8 16 37 39]
+ [13 31 29 27]]
+              precision    recall  f1-score   support
+
+       FW1       0.47      0.45      0.46       100
+        FW2       0.29      0.31      0.30       100
+       FW3       0.37      0.37      0.37       100
+       FW4       0.27      0.27      0.27       100
+
+    accuracy                           0.35       400
+   macro avg       0.35      0.35      0.35       400
+weighted avg       0.35      0.35      0.35       400
+
+
+Running permutation tests...
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+DIRECT FIRMWARE PERMUTATION TEST
+Accuracy: 0.2925, p=0.067932
+Macro-F1: 0.2914, p=0.065934
+Macro-OvR AUROC: 0.5651, p=0.006993
+Permutation 100/1000
+Permutation 200/1000
+Permutation 300/1000
+Permutation 400/1000
+Permutation 500/1000
+Permutation 600/1000
+Permutation 700/1000
+Permutation 800/1000
+Permutation 900/1000
+Permutation 1000/1000
+
+SLOT PERMUTATION TEST
+Accuracy: 0.2725, p=0.167832
+Macro-F1: 0.2682, p=0.156843
+Macro-OvR AUROC: 0.5317, p=0.055944
+==========================================================================================
+FixedBudget + Unordered
+SLOT-MEDIATED ATTACK
+Firmware accuracy: 0.2725
+Firmware macro-F1: 0.2726
+Slot macro-OvR AUROC: 0.5317 [0.4969, 0.5667]
+
+DIRECT FIRMWARE ATTACK
+Firmware accuracy: 0.2925 [0.2500, 0.3350]
+Firmware macro-F1: 0.2914 [0.2490, 0.3339]
+Firmware macro-OvR AUROC: 0.5651 [0.5285, 0.6007]
+
+Direct firmware confusion matrix:
+Labels: ['FW1' 'FW2' 'FW3' 'FW4']
+[[35 25 20 20]
+ [31 33 21 15]
+ [17 22 28 33]
+ [18 25 36 21]]
+              precision    recall  f1-score   support
+
+       FW1       0.35      0.35      0.35       100
+        FW2       0.31      0.33      0.32       100
+       FW3       0.27      0.28      0.27       100
+       FW4       0.24      0.21      0.22       100
+
+    accuracy                           0.29       400
+   macro avg       0.29      0.29      0.29       400
+weighted avg       0.29      0.29      0.29       400

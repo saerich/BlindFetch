@@ -7,6 +7,10 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Components.Web;
 using ObliviousOTA.Interop;
 using ObliviousOTA.Models.Request;
+using System.Diagnostics;
+using System.Globalization;
+using ObliviousOTA;
+using System.Collections.Concurrent;
 
 var b = WebApplication.CreateBuilder(args);
 
@@ -20,6 +24,8 @@ b.WebHost.ConfigureKestrel(x =>
         listen.UseHttps("./esp.pfx", Environment.GetEnvironmentVariable("BLIND_FETCH_TLS_PASSWORD"));
     });
 });
+
+b.Services.AddOpenApi();
 
 var app = b.Build();
 
@@ -37,6 +43,71 @@ app.Lifetime.ApplicationStopping.Register(cleanup);
 Directory.CreateDirectory("Logs");
 if(!File.Exists("Logs/Client.csv")) { File.WriteAllText("Logs/Client.csv", "StartTime,EndTime,Duration(us),Duration(s),MinHeap,MaxHeap,HeapDiff,FIrmware\n"); }
 if(!File.Exists("Logs/Executions.csv")) { File.WriteAllText("Logs/Executions.csv", "Start Time,TTFB,TTLB,Blocks Served,SlotOrder,Aborted?,Aborted at\n"); }
+ConcurrentDictionary<string, RequestMetrics> pendingLogins = new();
+
+var process = Process.GetCurrentProcess();
+var metricsLock = new object();
+
+long requestCounter = 0;
+int activeRequests = 0;
+
+const string metricsFile = "Logs/ServerMetrics.csv";
+if(!File.Exists("Logs/ServerMetrics.csv")) { File.WriteAllText(metricsFile, "RequestId,Operation,ActiveRequests,DurationMs,OpaqueMs,OprfMs,EncryptionMs,BundleMs,GeneratedBytes,SentBytes,CPUPercent,MemoryBefore,MemoryAfter,PeakWorkingSet,Status\n"); }
+
+void WriteMetrics(RequestMetrics m)
+{
+    lock (metricsLock)
+    {
+        File.AppendAllText("Logs/ServerMetrics.csv",
+            string.Join(",",
+                m.RequestId,
+                m.Operation,
+                m.Concurrent,
+                m.DurationMs.ToString("F3", CultureInfo.InvariantCulture),
+                m.OpaqueMs.ToString("F3", CultureInfo.InvariantCulture),
+                m.OprfMs.ToString("F3", CultureInfo.InvariantCulture),
+                m.EncryptionMs.ToString("F3", CultureInfo.InvariantCulture),
+                m.BundleMs.ToString("F3", CultureInfo.InvariantCulture),
+                m.GeneratedBytes,
+                m.SentBytes,
+                m.CPUPercent.ToString("F2", CultureInfo.InvariantCulture),
+                m.MemoryBefore,
+                m.MemoryAfter,
+                m.PeakWorkingSet,
+                m.Status
+            ) + "\n");
+    }
+}
+
+RequestMetrics StartMetrics(string operation)
+{
+    process.Refresh();
+
+    return new RequestMetrics
+    {
+        RequestId = Interlocked.Increment(ref requestCounter),
+        Operation = operation,
+        Concurrent = Interlocked.Increment(ref activeRequests),
+        StartTimestamp = Stopwatch.GetTimestamp(),
+        CpuBefore = process.TotalProcessorTime,
+        MemoryBefore = process.WorkingSet64
+    };
+}
+
+void EndMetrics(RequestMetrics m)
+{
+    m.DurationMs = Stopwatch.GetElapsedTime(m.StartTimestamp).TotalMilliseconds;
+
+    process.Refresh();
+
+    m.MemoryAfter = process.WorkingSet64;
+    m.PeakWorkingSet = process.PeakWorkingSet64;
+    m.CPUPercent = m.DurationMs > 0 ? (process.TotalProcessorTime - m.CpuBefore).TotalMilliseconds / m.DurationMs * 100.0 : 0;
+    
+    Interlocked.Decrement(ref activeRequests);
+    WriteMetrics(m);
+}
+
 
 byte[] seed = new byte[Interop.crypto_scalarmult_SCALARBYTES];
 
@@ -80,6 +151,7 @@ else
 app.MapGet("/Register", ([AsParameters] RegisterRequest req) =>
 {
     if(File.Exists($"{req.Username}.opqr")) { return Results.Conflict("Device registration not possible."); }
+    Console.WriteLine(req.Alpha);
     byte[] rawAlpha = Convert.FromHexString(req.Alpha);
     byte[]? rPub = InteropWrappers.OpaqueRegister(req.Username, rawAlpha, seed);
     Console.WriteLine(Convert.ToHexString(rPub ?? []));
@@ -99,17 +171,33 @@ app.MapGet("/RegisterFinalize", ([AsParameters] RegisterFinalizeRequest req) =>
 
 app.MapGet("/Login", ([AsParameters] LoginRequest req) =>
 {
+    RequestMetrics m = StartMetrics("OPAQUELogin");
     byte[] rawKe1 = Convert.FromHexString(req.Ke1);
+    long t = Stopwatch.GetTimestamp();
     byte[]? res = InteropWrappers.OpaqueLogin(rawKe1, req.Username);
-    if(res == null) { return Results.BadRequest("Could not attempt to log in."); }
+    m.OpaqueMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+    if(res == null)
+    {
+        m.Status = "Failed";
+        EndMetrics(m);
+        return Results.BadRequest("Could not attempt to log in.");
+    }
+    pendingLogins.TryAdd(req.Username, m);
     return Results.Ok(Convert.ToHexString(res));
 });
 
 app.MapGet("/LoginVerify", ([AsParameters] LoginVerifyRequest req) =>
 {
+    if(!pendingLogins.TryRemove(req.Username, out var m)) { return Results.BadRequest("No pending login."); }
+
     byte[] rawAuthU = Convert.FromHexString(req.AuthU);
-    if(!InteropWrappers.OpaqueLoginVerify(rawAuthU, req.Username)) { return Results.BadRequest("Could not log user in."); }
-    return Results.Ok();     
+    long t = Stopwatch.GetTimestamp();
+    bool verified = InteropWrappers.OpaqueLoginVerify(rawAuthU, req.Username);
+    
+    m.OpaqueMs += Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+    m.Status = verified ? m.Status : "Failed";
+    EndMetrics(m);
+    return verified ? Results.Ok() : Results.BadRequest("Could not log user in."); 
 });
 
 app.MapGet("/KTV", async([AsParameters] KTVRequest req) =>
@@ -266,6 +354,7 @@ app.MapGet("/GeneratePlainMetadata", async ctx =>
 
 app.MapPost("/Download", async ctx =>
 {
+    var m = StartMetrics("Download");
     DateTime startTime = DateTime.UtcNow;
     DateTime? aborted = null;
     int blocksServed = 0;
@@ -285,9 +374,13 @@ app.MapPost("/Download", async ctx =>
 
     byte[] unameBuf = new byte[BitConverter.ToInt32(unameLen)];
     await ctx.Request.Body.ReadExactlyAsync(unameBuf);
-
+    
+    long t = Stopwatch.GetTimestamp();
+    
     byte[]? beta1 = InteropWrappers.SelectOPRFEvaluate(alpha1, oprfFileSeed);
     byte[]? beta2 = InteropWrappers.SelectOPRFEvaluate(alpha2, oprfSizeSeed);
+    m.OprfMs = Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+
     byte[]? userKey = null;
 
 
@@ -330,9 +423,13 @@ app.MapPost("/Download", async ctx =>
     
     foreach(var key in allFirmwareKeys) 
     {
+        t = Stopwatch.GetTimestamp();
         byte[]? fwHash = InteropWrappers.CreateKeyFromSKUKey(userKey, File.ReadAllBytes(key));
         long actualFileSize = new FileInfo($"Firmware/{Path.GetFileNameWithoutExtension(key)}.bin").Length;
         (byte[] Ciphertext, byte[] Nonce)? len = InteropWrappers.EncryptFirmwareSize(userKey, oprfSizeSeed, fwHash ?? new byte[64], BitConverter.GetBytes(actualFileSize)); //24 bytes.
+        
+        m.EncryptionMs += Stopwatch.GetElapsedTime(t).TotalMilliseconds;
+        
         if(len == null) 
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden; 
@@ -342,7 +439,9 @@ app.MapPost("/Download", async ctx =>
         headerMs.Write(len.Value.Ciphertext);
     }
     byte[] header = headerMs.ToArray();
+    m.GeneratedBytes += header.Length;
     await ctx.Response.Body.WriteAsync(header);
+    m.SentBytes += header.Length;
     DateTime ttfb = DateTime.UtcNow;
     byte[] slots = [];
     const int slotSize = 4_194_304; // 4,194,304
@@ -367,15 +466,20 @@ app.MapPost("/Download", async ctx =>
                 Array.Clear(plainText, 0, plainText.Length); 
             }
             else if(read < plainText.Length) { Array.Clear(plainText, read, plainText.Length - read); }
-
+            
+            long encStart = Stopwatch.GetTimestamp();
+            
             (byte[] Ciphertext, byte[] Nonce)? encryptedFirmware = InteropWrappers.EncryptFirmware(x.idx, block++, userKey, oprfFileSeed, deviceKey, plainText);
             if(encryptedFirmware == null) { Console.WriteLine("Null response."); break; }
-            
+            m.EncryptionMs += Stopwatch.GetElapsedTime(encStart).TotalMilliseconds;
+    
             Memory<byte> encBlock = new byte[1052];
             encryptedFirmware.Value.Nonce.AsMemory().CopyTo(encBlock[..12]);
             encryptedFirmware.Value.Ciphertext.AsMemory().CopyTo(encBlock[12..]);
+            m.GeneratedBytes += encBlock.Length;
 
             await ctx.Response.Body.WriteAsync(encBlock);
+            m.SentBytes += encBlock.Length;
             if(aborted == null) { blocksServed++; }
             remaining -= plainText.Length;
         }
@@ -385,9 +489,12 @@ app.MapPost("/Download", async ctx =>
     try { await ctx.Response.Body.FlushAsync(ctx.RequestAborted); }
     finally
     {
+        EndMetrics(m);
         DateTime ttlb = DateTime.UtcNow;
         Console.WriteLine("Downloaded some firmware.");
         File.AppendAllText($"Logs/Executions.csv", $"{startTime},{ttfb - startTime},{ttlb - startTime},{blocksServed},[{string.Join("|", allFirmwareKeys.Select(x => $"{x.Replace("Keys/", "").Replace(".k", "")}" ))}],{aborted != null},{(aborted == null ? "" : aborted - startTime)}\n");
     }
 });
+
+app.MapOpenApi();
 app.Run();
