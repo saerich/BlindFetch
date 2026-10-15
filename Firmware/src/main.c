@@ -73,6 +73,8 @@ void app_main()
     GetDeviceMACAsString(macAddr);
     int64_t macAddrEndTime = esp_timer_get_time();
     
+    WiFiSync(10000);
+    
     #ifndef PlainOTA 
         int64_t opaqueInitTime = esp_timer_get_time();
         OPAQUEInit(macAddr);
@@ -81,7 +83,6 @@ void app_main()
         esp_err_t err = NetworkedOPAQUERegister(opaqueServerURL, macAddr, opaquePassword);
         int64_t opaqueRegisterEndTime = esp_timer_get_time();
     #endif
-    WiFiSync(10000);
     int count = 25;
     for(int run = 0; run < count; ++run)
     {

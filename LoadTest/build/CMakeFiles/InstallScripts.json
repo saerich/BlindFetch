@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/mnt/d/Projects/PHD/ObliviousOTA/LoadTest/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

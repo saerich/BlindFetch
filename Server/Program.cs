@@ -28,14 +28,14 @@ b.WebHost.ConfigureKestrel(x =>
 b.Services.AddOpenApi();
 
 var app = b.Build();
-
-var cleanup = () =>
+if(!Directory.Exists("OPAQUE")) { Directory.CreateDirectory("OPAQUE"); }
+void cleanup()
 {
-    _ = Directory.GetFiles(".", "*.osk").Select(x => { File.Delete(x); return 0; }).ToArray(); //Ensure all users are logged out when server stopped.
-    _ = Directory.GetFiles(".", "*.olau0").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all pending login attempts.
-    _ = Directory.GetFiles(".", "*.olsk").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all potential shared keys.
-    _ = Directory.GetFiles(".", "*.opqs").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all registration in progress attempts.
-};
+    _ = Directory.GetFiles("OPAQUE", "*.osk").Select(x => { File.Delete(x); return 0; }).ToArray(); //Ensure all users are logged out when server stopped.
+    _ = Directory.GetFiles("OPAQUE", "*.olau0").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all pending login attempts.
+    _ = Directory.GetFiles("OPAQUE", "*.olsk").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all potential shared keys.
+    _ = Directory.GetFiles("OPAQUE", "*.opqs").Select(x => { File.Delete(x); return 0; }).ToArray(); //Terminate all registration in progress attempts.
+}
 
 cleanup();
 app.Lifetime.ApplicationStopping.Register(cleanup);
@@ -111,46 +111,46 @@ void EndMetrics(RequestMetrics m)
 
 byte[] seed = new byte[Interop.crypto_scalarmult_SCALARBYTES];
 
-if(!File.Exists("opaqueseed"))
+if(!File.Exists("OPAQUE/opaqueseed"))
 {
     int ret = Interop.OpaqueInit(seed);
-    if(ret == 0) { File.WriteAllBytes("opaqueseed", seed); }
+    if(ret == 0) { File.WriteAllBytes("OPAQUE/opaqueseed", seed); }
     else { throw new Exception("Could not create OPAQUE Seed."); }
 }
 else
 {
-    seed = File.ReadAllBytes("opaqueseed");
+    seed = File.ReadAllBytes("OPAQUE/opaqueseed");
 }
 
 byte[] oprfFileSeed = new byte[Interop.crypto_scalarmult_SCALARBYTES];
 
-if(!File.Exists("oprffileseed"))
+if(!File.Exists("OPAQUE/oprffileseed"))
 {
     int ret = Interop.OpaqueInit(oprfFileSeed);
-    if(ret == 0) { File.WriteAllBytes("oprffileseed", oprfFileSeed); }
+    if(ret == 0) { File.WriteAllBytes("OPAQUE/oprffileseed", oprfFileSeed); }
     else { throw new Exception("Could not create OPRF File Seed."); }
 }
 else
 {
-    oprfFileSeed = File.ReadAllBytes("oprffileseed");
+    oprfFileSeed = File.ReadAllBytes("OPAQUE/oprffileseed");
 }
 byte[] oprfSizeSeed = new byte[Interop.crypto_scalarmult_SCALARBYTES];
 
-if(!File.Exists("oprfsizeseed"))
+if(!File.Exists("OPAQUE/oprfsizeseed"))
 {
     int ret = Interop.OpaqueInit(oprfSizeSeed);
-    if(ret == 0) { File.WriteAllBytes("oprfsizeseed", oprfSizeSeed); }
+    if(ret == 0) { File.WriteAllBytes("OPAQUE/oprfsizeseed", oprfSizeSeed); }
     else { throw new Exception("Could not create OPRF Size Seed."); }
 }
 else
 {
-    oprfSizeSeed = File.ReadAllBytes("oprfsizeseed");
+    oprfSizeSeed = File.ReadAllBytes("OPAQUE/oprfsizeseed");
 }
 
 
 app.MapGet("/Register", ([AsParameters] RegisterRequest req) =>
 {
-    if(File.Exists($"{req.Username}.opqr")) { return Results.Conflict("Device registration not possible."); }
+    if(File.Exists($"OPAQUE/{req.Username}.opqr")) { return Results.Conflict("Device registration not possible."); }
     Console.WriteLine(req.Alpha);
     byte[] rawAlpha = Convert.FromHexString(req.Alpha);
     byte[]? rPub = InteropWrappers.OpaqueRegister(req.Username, rawAlpha, seed);
@@ -274,8 +274,8 @@ app.MapPost("/GenerateHeaders", async ctx =>
 
     try
     {
-        userKey = File.ReadAllBytes($"{username}.osk");
-        File.Delete($"{username}.osk");
+        userKey = File.ReadAllBytes($"OPAQUE/{username}.osk");
+        File.Delete($"OPAQUE/{username}.osk");
     }
     catch(Exception ex)
     {
@@ -388,8 +388,8 @@ app.MapPost("/Download", async ctx =>
 
     try
     {
-        userKey = File.ReadAllBytes($"{username}.osk");
-        File.Delete($"{username}.osk"); //Log the user out, one use per key.
+        userKey = File.ReadAllBytes($"OPAQUE/{username}.osk");
+        File.Delete($"OPAQUE/{username}.osk"); //Log the user out, one use per key.
     }
     catch(Exception ex)
     {

@@ -23,7 +23,11 @@ esp_err_t NetworkedOPAQUERegister(const char* opaqueServerUrl, const char* usern
     cJSON* registerResponse = HTTPGetJSON(url, &statusCode);
     memset(url, 0x00, sizeof(url));
 
-    if(statusCode != 200) { return ESP_ERR_NOT_SUPPORTED; } //Already registered.
+    if(statusCode != 200) 
+    { 
+        cJSON_Delete(registerResponse);
+        return ESP_ERR_NOT_SUPPORTED;  //Already registered.
+    }
 
     const char* rPubStr = cJSON_GetStringValue(registerResponse);
 

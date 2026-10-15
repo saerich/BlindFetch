@@ -57,7 +57,9 @@ cJSON* HTTPGetJSON(const char* url, int* statusCode)
         .method = HTTP_METHOD_GET,
         .event_handler = onHttpReceive,
         .user_data = &ctx,
+        #ifndef NATIVE_BUILD
         .cert_pem = pemStart,
+        #endif
         //.crt_bundle_attach = esp_crt_bundle_attach
     };
 
@@ -83,12 +85,18 @@ cJSON* HTTPGetJSON(const char* url, int* statusCode)
 
     if(stat < 200 || stat >= 300)
     {
-        ESP_LOGE(TAG, "Non-Successful status code from HTTP Request.");
+        ESP_LOGE(TAG, "Non-Successful status code from HTTP Request: %d.", *statusCode);
         esp_http_client_cleanup(cli);
         free(buf);
         return NULL;
     }
-
+    if(ctx.bufLen == 0)
+    {
+        ESP_LOGD(TAG, "HTTP request succeeded with empty response.");
+        esp_http_client_cleanup(cli);
+        free(buf);
+        return NULL;
+    }
     if(ctx.bufLen < ctx.bufSize) { ctx.buf[ctx.bufLen] = '\0'; }
     else { ctx.buf[ctx.bufSize-1] = '\0'; }
     ESP_LOGD(TAG, "Raw JSON: %s", ctx.buf);
@@ -130,7 +138,9 @@ void HTTPGet(const char* url, int* statusCode)
         .method = HTTP_METHOD_GET,
         .event_handler = onHttpReceive,
         .user_data = &ctx,
+        #ifndef NATIVE_BUILD
         .cert_pem = pemStart,
+        #endif
         //.crt_bundle_attach = esp_crt_bundle_attach,
         .buffer_size_tx = 4096
     };
@@ -157,7 +167,7 @@ void HTTPGet(const char* url, int* statusCode)
 
     if(stat < 200 || stat >= 300)
     {
-        ESP_LOGE(TAG, "Non-Successful status code from HTTP Request.");
+        ESP_LOGE(TAG, "Non-Successful status code from HTTP Request. %d", *statusCode);
         esp_http_client_cleanup(cli);
         free(buf);
         return;
@@ -199,7 +209,9 @@ esp_err_t TLSPost(const char* baseURL, const char* path, const uint8_t* postBody
         .timeout_ms = 3600000,
         .buffer_size = 4096, //DISCARD_BUFFER_SIZE,
         .buffer_size_tx = 1024,
+        #ifndef NATIVE_BUILD
         .cert_pem = pemStart
+        #endif
         //.crt_bundle_attach = esp_crt_bundle_attach,
     };
 
