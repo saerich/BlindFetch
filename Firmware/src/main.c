@@ -7,6 +7,7 @@
 #include <esp_timer.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
+#include <esp_task.h>
 
 #ifndef WIFI_SSID
 #error "WIFI_SSID must be specified in .env"
@@ -65,6 +66,9 @@ static void fisherYatesShuffle(size_t* indicies, size_t count)
  */
 void app_main()
 {    
+    #ifdef Wait
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    #endif
     int64_t startTime = esp_timer_get_time();
     WiFiConnect(wifiSSID, wifiPassword);
 
@@ -128,7 +132,10 @@ void app_main()
                     else { heap_high = peak_heap_used; }
                     size_t heap_low = heap_low_after;
                     
-                    ESP_LOGI("OTA", "Sending metrics to the Server");                
+                    ESP_LOGI("OTA", "Sending metrics to the Server");           
+                    #ifdef Wait
+                        vTaskDelay(pdMS_TO_TICKS(5000));
+                    #endif     
                     SendMetricsToServer(opaqueServerURL, heap_high, heap_low, opaqueLoginEndTime, downloadEndTime, selectedFirmwareName);
                     ESP_LOGI("TIMING", "Peak Heap: %d, Lowest Heap: %d, Execution Time: %d", heap_after, lowest_free_heap, downloadEndTime - opaqueLoginEndTime);
                 #endif

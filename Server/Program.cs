@@ -28,6 +28,7 @@ b.WebHost.ConfigureKestrel(x =>
 b.Services.AddOpenApi();
 
 var app = b.Build();
+Directory.Delete("OPAQUE", true);
 if(!Directory.Exists("OPAQUE")) { Directory.CreateDirectory("OPAQUE"); }
 void cleanup()
 {

@@ -180,7 +180,7 @@ rf_r2 = r2_score(y_test, rf_pred)
 rf_mae = mean_absolute_error(y_test, rf_pred)
 
 print(f"Blind Fetch Linear Regression R²: {lin_r2:.6f}")
-print(f"Blind Fetch Linear Regression MAE: {rf_mae:.2f} bytes")
+print(f"Blind Fetch Linear Regression MAE: {lin_mae:.2f} bytes")
 print(f"Blind Fetch Random Forest Regression R²: {rf_r2:.6f}")
 print(f"Blind Fetch Random Forest Regression MAE: {rf_mae:.2f} bytes")
 

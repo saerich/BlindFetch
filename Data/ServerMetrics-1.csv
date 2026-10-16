@@ -1,0 +1,3 @@
+RequestId,Operation,ActiveRequests,DurationMs,OpaqueMs,OprfMs,EncryptionMs,BundleMs,GeneratedBytes,SentBytes,CPUPercent,MemoryBefore,MemoryAfter,PeakWorkingSet,Status
+1,OPAQUELogin,1,176.072,13.022,0.000,0.000,0.000,0,0,11.60,108355584,108519424,108519424,Completed
+2,Download,1,1360.396,0.000,0.188,994.663,0.000,17236180,17236180,240.67,108695552,118194176,118194176,Completed

@@ -2010,7 +2010,7 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 #
 # libsodium
 #
-CONFIG_LIBSODIUM_USE_MBEDTLS_SHA=y
+# CONFIG_LIBSODIUM_USE_MBEDTLS_SHA is not set
 # end of libsodium
 # end of Component config
 
