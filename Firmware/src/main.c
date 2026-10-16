@@ -25,28 +25,49 @@
 #error "OPAQUE_SERVER_URL must be specified in .env"
 #endif
 
+#ifndef NUM_FIRMWARE_KEYS
+#error "NUM_FIRMWARE_KEYS must be specified in .env"
+#endif
+
+#ifndef FIRMWARE_NAMES
+#error "FIRMWARE_NAMES must be specified in .env as a comma separated list."
+#endif
+
+#ifndef FIRMWARE_KEYS
+#error "FIRMWARE_KEYS must be specified in .env as a comma separated list."
+#endif
+
+#define FIRMWARE_COUNT NUM_FIRMWARE_KEYS
+
+static char firmwareKeysBuffer[] = FIRMWARE_KEYS;
+static char firmwareNamesBuffer[] = FIRMWARE_NAMES;
+
+static const char* firmwareKeys[FIRMWARE_COUNT];
+static const char* firmwareNames[FIRMWARE_COUNT];
+
+static bool parseCSV(char* input, const char** output, size_t expectedCount)
+{
+    size_t count = 0;
+    char* current = input;
+
+    while (current && count < expectedCount)
+    {
+        output[count++] = current;
+
+        char* separator = strchr(current, ',');
+        if (!separator) { break; }
+
+        *separator = '\0';
+        current = separator + 1;
+    }
+    return count == expectedCount && current != NULL && strchr(current, ',') == NULL;
+}
+
 const char* wifiSSID = WIFI_SSID;
 const char* wifiPassword = WIFI_PASSWORD;
 const char* opaquePassword = OPAQUE_PASSWORD;
 const char* opaqueServerURL = OPAQUE_SERVER_URL;
-//const char* deviceFirmwareKey = FIRMWARE_KEY; // Under normal circumstances, this would be an EFUSE burned value from a fabricator. 
 const char* TAG = "[Main]";
-
-static const char* firmwareKeys[] = {
-    FIRMWARE_KEY_BBT01,
-    FIRMWARE_KEY_LB01,
-    FIRMWARE_KEY_PSC01,
-    FIRMWARE_KEY_SLM01
-};
-static const char *firmwareNames[] =
-{
-    "BBT01",
-    "LB01",
-    "PSC01",
-    "SLM01"
-};
-
-#define FIRMWARE_COUNT (sizeof(firmwareKeys) / sizeof(firmwareKeys[0]))
 
 static void fisherYatesShuffle(size_t* indicies, size_t count)
 {
@@ -69,6 +90,11 @@ void app_main()
     #ifdef Wait
         vTaskDelay(pdMS_TO_TICKS(5000));
     #endif
+    if(!parseCSV(firmwareKeysBuffer, firmwareKeys, FIRMWARE_COUNT) || !parseCSV(firmwareNamesBuffer, firmwareNames, FIRMWARE_COUNT))
+    {
+        ESP_LOGE(TAG, "Could not process firmware keys.");
+        return;
+    }
     int64_t startTime = esp_timer_get_time();
     WiFiConnect(wifiSSID, wifiPassword);
 
