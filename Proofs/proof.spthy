@@ -17,7 +17,6 @@ functions:
 equations:
   /* OPRF correctness */
   unblind(r, eval(blind(x,r), k)) = prf(k,x),
-
   /* AEAD correctness */
   aead_dec(aead(m,k,n,a), k, n, a) = m
 
@@ -50,7 +49,7 @@ rule OPAQUE_Login:
     ServerKeyEstablished(dfk0, ~sk),
     Secret(~sk)
   ]->
-  [ Sess(dfk0, ~sk) ]
+  [ !Sess(dfk0, ~sk) ]
 
 
 /* ===================== OPRF PHASE ===================== */
@@ -60,7 +59,7 @@ rule Client_SendAlphas:
     a1 = blind(dfk0, ~r1)
     a2 = blind(slotid(dfk0), ~r2)
   in
-  [ Sess(dfk0, sk), Fr(~r1), Fr(~r2) ]
+  [ !Sess(dfk0, sk), Fr(~r1), Fr(~r2) ]
   -->
   [ StWaitBetas(dfk0, sk, ~r1, ~r2),
     Out(<a1, a2>) ]
@@ -98,9 +97,9 @@ rule Server_SendDesc_Slot0:
     csize0 = aead(~size0, Ksize0, ~n0, aad_size(sid0))
   in
   [ !OPRF_Size_Secret(kS),
-    Sess(dfk0,sk),
+    !Sess(dfk0,sk),
     Fr(~size0), Fr(~n0) ]
-  -->
+  --[ ServerSentSize(sid0) ]->
   [ Out(<sid0, ~n0, csize0>) ]
 
 rule Server_SendDesc_Slot1:
@@ -111,17 +110,17 @@ rule Server_SendDesc_Slot1:
     csize1 = aead(~size1, Ksize1, ~n1, aad_size(sid1))
   in
   [ !OPRF_Size_Secret(kS),
-    Sess(dfk0,sk),
+    !Sess(dfk0,sk),
     !OtherSKU(dfk1),
     Fr(~size1), Fr(~n1) ]
-  -->
+  --[ ServerSentSize(sid1) ]->
   [ Out(<sid1, ~n1, csize1>) ]
 
 rule Client_AcceptSize:
   [ !Keys(dfk0, sk, Kpay, Ksize),
     In(<sid, n, aead(size, Ksize, n, aad_size(sid))>) ]
-  -->
-  [ ClientAcceptedSize(dfk0, sid) ]
+  --[ ClientAcceptedSize(dfk0, sid) ]->
+  []
 
 /* ===================== PAYLOAD ===================== */
 
@@ -133,7 +132,7 @@ rule Server_SendBlock:
     cblk   = aead(~blk0, Kpay0, ~nB, aad_blk(sid0, idx0))
   in
   [ !OPRF_Payload_Secret(kP),
-    Sess(dfk0,sk),
+    !Sess(dfk0,sk),
     Fr(~blk0), Fr(~nB) ]
   --[ ServerSentBlock(sid0, idx0) ]->
   [ Out(<sid0, idx0, ~nB, cblk>) ]
@@ -141,8 +140,8 @@ rule Server_SendBlock:
 rule Client_AcceptBlock:
   [ !Keys(dfk0, sk, Kpay, Ksize),
     In(<sid, idx0, n, aead(blk, Kpay, n, aad_blk(sid, idx0))>) ]
-  -->
-  [ ClientAcceptedBlock(dfk0, sid, idx0) ]
+  --[ ClientAcceptedBlock(dfk0, sid, idx0) ]->
+  []
 
 /* ===================== LEMMAS ===================== */
 
@@ -175,4 +174,36 @@ lemma SizeAuth:
   "All dfk0 sid #i.
      ClientAcceptedSize(dfk0, sid) @ #i
      ==> Ex #j. ServerSentSize(sid) @ #j"
+
+/* Reachability test. */
+lemma SizeAcceptanceReachable:
+  exists-trace
+  "Ex dfk0 sid #i.
+    ClientAcceptedSize(dfk0, sid) @ #i"
+
+lemma BlockAcceptanceReachable:
+  exists-trace
+  "Ex dfk0 sid idx #i.
+    ClientAcceptedBlock(dfk0, sid, idx) @ #i"
+
+lemma KeyDerivationReachable:
+  exists-trace
+  "Ex dfk0 Kpay Ksize #i.
+    DerivedKeys(dfk0, Kpay, Ksize) @ #i"     
+
+lemma ServerSizeReachable:
+  exists-trace
+  "Ex sid #i.
+    ServerSentSize(sid) @ #i"
+
+lemma ServerBlockReachable:
+  exists-trace
+  "Ex sid idx #i.
+    ServerSentBlock(sid, idx) @ #i"
+
+lemma CorrectSizeKeyReachable:
+  exists-trace
+  "Ex dfk0 Kpay Ksize sk kS #i.
+    DerivedKeys(dfk0, Kpay, Ksize) @ #i
+    & Ksize = kdf(sk, prf(kS, slotid(dfk0)), tag_size)"
 end
