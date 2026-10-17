@@ -34,7 +34,7 @@ python3 -m pip install -r ./Scripts/requirements.txt
 | `python3 ./Scripts/timing.py` | Conventional `esp_https_ota` versus Blind Fetch mean execution times and standard deviations, with plot. |
 | `python3 ./Scripts/regressor.py` | Firmware-size inference from encrypted metadata versus a plaintext static-manifest control, using linear and Random Forest regression. |
 
-These scripts use recorded datasets in `Data/`; they do **not** collect new measurements. Plotting scripts may open interactive windows; close a window to proceed to the next plot. `auroc.py` performs 1,000 permutations per attack/configuration and 10,000 bootstrap samples for confidence intervals, so it may take considerable time.
+These scripts use recorded datasets in `Data/`. They do **not** collect new measurements. Plotting scripts may open interactive windows; close a window to proceed to the next plot. `auroc.py` performs 1,000 permutations per attack/configuration and 10,000 bootstrap samples for confidence intervals, so it may take considerable time.
 
 With the current dataset, `regressor.py` reports Blind Fetch linear-regression MAE **398.04 bytes** and Random Forest MAE **415.44 bytes**.
 
