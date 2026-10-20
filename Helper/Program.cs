@@ -1,22 +1,35 @@
-﻿//#define ConstructMergedExecutions
+﻿#define HeldOut
+//#define ConstructMergedExecutions
 //#define TLSComparison
 // //BBT01|LB01|PSC01|SLM01
 
 #if ConstructMergedExecutions
 
+#if HeldOut
+    string LogDirectory = "../Data/HeldOut-";
+#else
+    string LogDirectory = "../Data/Logs-";
+#endif
+#if HeldOut
+    string OutputName = "HeldOutExecutions";
+#else
+    string OutputName = "MergedExecutions";
+#endif
+
+
 string[][] clientFirmware = [
-    [.. File.ReadAllLines("../Data/Logs-EarlyClose-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
-    [.. File.ReadAllLines("../Data/Logs-EarlyClose-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
-    [.. File.ReadAllLines("../Data/Logs-FixedBudget-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
-    [.. File.ReadAllLines("../Data/Logs-FixedBudget-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())]
+    [.. File.ReadAllLines($"{LogDirectory}EarlyClose-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines($"{LogDirectory}EarlyClose-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines($"{LogDirectory}FixedBudget-Ordered/Client.csv").Skip(1).Select(x => x.Split(",").Last())], 
+    [.. File.ReadAllLines($"{LogDirectory}FixedBudget-Randomized/Client.csv").Skip(1).Select(x => x.Split(",").Last())]
 ];
 
-string[] orderedCloseEarlyExec = [.. File.ReadAllLines("../Data/Logs-EarlyClose-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[0].ElementAt(idx)},{x}")];
-string[] unorderedCloseEarlyExec = [.. File.ReadAllLines("../Data/Logs-EarlyClose-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[1].ElementAt(idx)},{x}")];
-string[] orderedFixedExec = [.. File.ReadAllLines("../Data/Logs-FixedBudget-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[2].ElementAt(idx)},{x}")];
-string[] unorderedFixedExec = [.. File.ReadAllLines("../Data/Logs-FixedBudget-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[3].ElementAt(idx)},{x}")];
+string[] orderedCloseEarlyExec = [.. File.ReadAllLines($"{LogDirectory}EarlyClose-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[0].ElementAt(idx)},{x}")];
+string[] unorderedCloseEarlyExec = [.. File.ReadAllLines($"{LogDirectory}EarlyClose-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[1].ElementAt(idx)},{x}")];
+string[] orderedFixedExec = [.. File.ReadAllLines($"{LogDirectory}FixedBudget-Ordered/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[2].ElementAt(idx)},{x}")];
+string[] unorderedFixedExec = [.. File.ReadAllLines($"{LogDirectory}FixedBudget-Randomized/Executions.csv").Skip(1).Select((x, idx) => $"{clientFirmware[3].ElementAt(idx)},{x}")];
 
-string outFile = "../Data/MergedExecutions.csv";
+string outFile = $"../Data/{OutputName}.csv";
 
 if(File.Exists(outFile)) { File.Delete(outFile); }
 File.WriteAllText(outFile, "RoundId,Mode,Ordering,Slots,TTFB Miliseconds,TTLB Miliseconds,Blocks,Id,ActualSlot,Slot0,Slot1,Slot2,Slot3\n");

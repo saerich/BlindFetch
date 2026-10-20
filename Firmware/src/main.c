@@ -87,9 +87,6 @@ static void fisherYatesShuffle(size_t* indicies, size_t count)
  */
 void app_main()
 {    
-    #ifdef Wait
-        vTaskDelay(pdMS_TO_TICKS(5000));
-    #endif
     if(!parseCSV(firmwareKeysBuffer, firmwareKeys, FIRMWARE_COUNT) || !parseCSV(firmwareNamesBuffer, firmwareNames, FIRMWARE_COUNT))
     {
         ESP_LOGE(TAG, "Could not process firmware keys.");
@@ -113,9 +110,12 @@ void app_main()
         esp_err_t err = NetworkedOPAQUERegister(opaqueServerURL, macAddr, opaquePassword);
         int64_t opaqueRegisterEndTime = esp_timer_get_time();
     #endif
-    int count = 25;
+    int count = 1;
     for(int run = 0; run < count; ++run)
     {
+    #ifdef Wait
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    #endif
         size_t firmwareOrder[FIRMWARE_COUNT];
         for(size_t i = 0; i < FIRMWARE_COUNT; ++i) { firmwareOrder[i] = i; }
         fisherYatesShuffle(firmwareOrder, FIRMWARE_COUNT);
@@ -168,8 +168,14 @@ void app_main()
                 ESP_LOGI("OTA", "OTA Completed, %lld - %lld", opaqueLoginTime, downloadEndTime);            
             #else
                 uint64_t startTime = esp_timer_get_time();
+                #ifdef Wait
+                    vTaskDelay(pdMS_TO_TICKS(5000));
+                #endif
                 uint64_t endTime = PlainOTADownload(opaqueServerURL);
                 if(endTime == ESP_FAIL) { ESP_LOGE("OTA", "Failed to OTA."); continue; }
+                #ifdef Wait
+                    vTaskDelay(pdMS_TO_TICKS(5000));
+                #endif
                 ESP_LOGI("OTA", "OTA Completed, %lld - %lld", startTime, endTime);
             #endif
         }

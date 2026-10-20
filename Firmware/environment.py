@@ -13,5 +13,8 @@ def load(path=".env"):
         for line in f:
             if "=" in line and not line.startswith("#"):
                 k, v = line.strip().split("=", 1)
-                env.Append(BUILD_FLAGS=[f'-D{k}=\\"{v}\\"'])
+                if k == "NUM_FIRMWARE_KEYS":
+                    env.Append(BUILD_FLAGS=[f"-D{k}={int(v)}"])
+                else:
+                    env.Append(BUILD_FLAGS=[f'-D{k}=\\"{v}\\"'])
 load()
