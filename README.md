@@ -197,10 +197,6 @@ The device must trust the origin's certificate, reach its configured address, an
 - **Entitlement scope:** FES secrecy and trusted initial provisioning are assumptions. Family-wide FES compromise, physical extraction, rotation, and revocation are not solved by this prototype.
 - **Operational safety:** Some build flags expose secrets or install firmware. Use disposable test credentials, appropriate test hardware, and an isolated network.
 
-## Archival reproducibility
-
-For a permanent research snapshot, cite an immutable Git release or archive DOI rather than a moving branch. The archive should include the precise datasets used for all reported analyses, the scripts and requirements, the symbolic model, and the corresponding source revision. Do not archive real device credentials, FES values, TLS private keys, or sensitive protocol traces.
-
 ## Citation and license
 
 If you use this artifact, please cite the accompanying paper, *Blind Fetch: Origin-Private Firmware Selection for OTA Updates*.
