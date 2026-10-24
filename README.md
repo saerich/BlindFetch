@@ -1,6 +1,6 @@
 # Blind Fetch
 
-**Blind Fetch: Origin-Private Firmware Selection for OTA Updates**
+**Blind Fetch: Origin-Private Firmware Selection in OTA Systems**
 
 Blind Fetch is an experimental over-the-air (OTA) firmware-delivery protocol for constrained devices. It combines authenticated device access, high-entropy Firmware Entitlement Secrets (FES), oblivious pseudorandom function (OPRF) evaluation, encrypted firmware metadata, and fixed-budget retrieval to reduce what an honest-but-curious firmware origin can infer about the firmware selected by a client.
 
@@ -199,6 +199,6 @@ The device must trust the origin's certificate, reach its configured address, an
 
 ## Citation and license
 
-If you use this artifact, please cite the accompanying paper, *Blind Fetch: Origin-Private Firmware Selection for OTA Updates*.
+If you use this artifact, please cite the accompanying paper, *Blind Fetch: Origin-Private Firmware Selection in OTA Systems*.
 
 The repository is distributed under the **BSD 3-Clause License**. See [`LICENSE`](LICENSE) for the full terms.

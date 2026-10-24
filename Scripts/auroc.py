@@ -10,6 +10,7 @@ N_SPLITS = 5
 N_BOOTSTRAPS = 10000
 N_PERMUTATIONS = 1000
 RANDOM_STATE = 42
+RUN_PERMUTATIONS = True
 
 data = pd.read_csv(CSV_PATH)
 data.columns = ["round","policy","ordering","S","ttfb_ms","ttlb_ms","blocks_sent","perm_id","target_position","Slot0","Slot1","Slot2","Slot3"]
@@ -26,6 +27,52 @@ def slot_to_firmware(row, slot):
 
 def features(sub):
     return pd.get_dummies(sub[TIMING_FEATURES + SLOT_COLS], columns=SLOT_COLS, dtype=int)
+
+def bootstrap_firmware_metrics(y_true, y_pred, groups):
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    groups = np.asarray(groups)
+
+    unique_groups = np.unique(groups)
+    group_idx = {
+        g: np.flatnonzero(groups == g)
+        for g in unique_groups
+    }
+
+    rng = np.random.default_rng(RANDOM_STATE)
+
+    boot_acc = np.empty(N_BOOTSTRAPS)
+    boot_f1 = np.empty(N_BOOTSTRAPS)
+
+    labels = np.unique(y_true)
+
+    for i in range(N_BOOTSTRAPS):
+        sampled_groups = rng.choice(
+            unique_groups,
+            size=len(unique_groups),
+            replace=True
+        )
+
+        idx = np.concatenate([
+            group_idx[g] for g in sampled_groups
+        ])
+
+        boot_acc[i] = accuracy_score(
+            y_true[idx], y_pred[idx]
+        )
+
+        boot_f1[i] = f1_score(
+            y_true[idx],
+            y_pred[idx],
+            labels=labels,
+            average="macro",
+            zero_division=0
+        )
+
+    return (
+        np.percentile(boot_acc, [2.5, 97.5]),
+        np.percentile(boot_f1, [2.5, 97.5])
+    )
 
 def evaluate(y, X, groups):
     y = pd.Series(y).reset_index(drop=True)
@@ -166,36 +213,40 @@ for policy in ["EarlyClose","FixedBudget"]:
         mediated_fw=np.array([slot_to_firmware(row,s) for (_,row),s in zip(sub.iterrows(),slot["pred"])])
         mediated_acc=accuracy_score(actual_fw,mediated_fw)
         mediated_f1=f1_score(actual_fw,mediated_fw,average="macro")
-
+        mediated_acc_ci, mediated_f1_ci = bootstrap_firmware_metrics(
+            actual_fw,
+            mediated_fw,
+            groups
+        )
         # Attack 2: infer firmware identity directly.
         direct=evaluate(pd.Series(actual_fw,index=sub.index),X,groups)
+        if RUN_PERMUTATIONS:
+            print("\nRunning permutation tests...")
+            direct_perm = permutation_test(pd.Series(actual_fw, index=sub.index), X, groups)
 
-        print("\nRunning permutation tests...")
-        direct_perm = permutation_test(pd.Series(actual_fw, index=sub.index), X, groups)
+            print("\nDIRECT FIRMWARE PERMUTATION TEST")
+            print(f"Accuracy: {direct_perm['observed_accuracy']:.4f}, "
+                f"p={direct_perm['p_accuracy']:.6f}"
+            )
+            print(f"Macro-F1: {direct_perm['observed_f1']:.4f}, "
+                f"p={direct_perm['p_f1']:.6f}"
+            )
+            print(f"Macro-OvR AUROC: {direct_perm['observed_auc']:.4f}, "
+                f"p={direct_perm['p_auc']:.6f}"
+            )
 
-        print("\nDIRECT FIRMWARE PERMUTATION TEST")
-        print(f"Accuracy: {direct_perm['observed_accuracy']:.4f}, "
-            f"p={direct_perm['p_accuracy']:.6f}"
-        )
-        print(f"Macro-F1: {direct_perm['observed_f1']:.4f}, "
-            f"p={direct_perm['p_f1']:.6f}"
-        )
-        print(f"Macro-OvR AUROC: {direct_perm['observed_auc']:.4f}, "
-            f"p={direct_perm['p_auc']:.6f}"
-        )
+            slot_perm = permutation_test(sub["target_position"], X, groups)
 
-        slot_perm = permutation_test(sub["target_position"], X, groups)
-
-        print("\nSLOT PERMUTATION TEST")
-        print(f"Accuracy: {slot_perm['observed_accuracy']:.4f}, "
-            f"p={slot_perm['p_accuracy']:.6f}"
-        )
-        print(f"Macro-F1: {slot_perm['observed_f1']:.4f}, "
-            f"p={slot_perm['p_f1']:.6f}"
-        )
-        print(f"Macro-OvR AUROC: {slot_perm['observed_auc']:.4f}, "
-            f"p={slot_perm['p_auc']:.6f}"
-        )
+            print("\nSLOT PERMUTATION TEST")
+            print(f"Accuracy: {slot_perm['observed_accuracy']:.4f}, "
+                f"p={slot_perm['p_accuracy']:.6f}"
+            )
+            print(f"Macro-F1: {slot_perm['observed_f1']:.4f}, "
+                f"p={slot_perm['p_f1']:.6f}"
+            )
+            print(f"Macro-OvR AUROC: {slot_perm['observed_auc']:.4f}, "
+                f"p={slot_perm['p_auc']:.6f}"
+            )
 
         label=policy.replace("EarlyClose","Early Close").replace("FixedBudget","Fixed Budget")+"\n"+ordering.replace("Unordered","Randomized")
         results.append((label,slot,mediated_acc,mediated_f1,direct))
@@ -203,8 +254,8 @@ for policy in ["EarlyClose","FixedBudget"]:
         print("="*90)
         print(f"{policy} + {ordering}")
         print("SLOT-MEDIATED ATTACK")
-        print(f"Firmware accuracy: {mediated_acc:.4f}")
-        print(f"Firmware macro-F1: {mediated_f1:.4f}")
+        print(f"Firmware accuracy: {mediated_acc:.4f} [{mediated_acc_ci[0]:.4f}, {mediated_acc_ci[1]:.4f}]")
+        print(f"Firmware macro-F1: {mediated_f1:.4f} [{mediated_f1_ci[0]:.4f}, {mediated_f1_ci[1]:.4f}]")
         print(f"Slot macro-OvR AUROC: {slot['macro_auc']:.4f} [{slot['auc_ci'][0]:.4f}, {slot['auc_ci'][1]:.4f}]")
         print("\nDIRECT FIRMWARE ATTACK")
         print(f"Firmware accuracy: {direct['accuracy']:.4f} [{direct['accuracy_ci'][0]:.4f}, {direct['accuracy_ci'][1]:.4f}]")
